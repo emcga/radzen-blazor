@@ -228,6 +228,13 @@ namespace Radzen.Blazor
         }
 
         /// <summary>
+        /// Gets or sets the header tooltip.
+        /// </summary>
+        /// <value>The header tooltip.</value>
+        [Parameter]
+        public string HeaderTooltip { get; set; }
+
+        /// <summary>
         /// Gets or sets the title.
         /// </summary>
         /// <value>The title.</value>
@@ -1021,6 +1028,19 @@ namespace Radzen.Blazor
                     || GetFilterOperator() == FilterOperator.IsNotEmpty;
         }
 
+        internal bool HasCustomFilter()
+        {
+            return GetFilterOperator() == FilterOperator.Custom && GetCustomFilterExpression() != null;
+        }
+
+        internal bool HasActiveFilter()
+        {
+            return GetFilterValue() != null
+            || GetSecondFilterValue() != null
+            || CanSetFilterValue()
+            || HasCustomFilter();
+        }
+
         /// <summary>
         /// Get custom filter linq.
         /// </summary>
@@ -1063,7 +1083,7 @@ namespace Radzen.Blazor
             FilterOperator = FilterOperator == FilterOperator.Custom
                 ? FilterOperator.Custom
                 : typeof(System.Collections.IEnumerable).IsAssignableFrom(FilterPropertyType)
-                    ? FilterOperator.Contains
+                    ? !string.IsNullOrEmpty(FilterProperty) && FilterProperty != Property ? FilterOperator.In : FilterOperator.Contains
                     : default(FilterOperator);
             SecondFilterOperator = default(FilterOperator);
             LogicalFilterOperator = default(LogicalFilterOperator);
