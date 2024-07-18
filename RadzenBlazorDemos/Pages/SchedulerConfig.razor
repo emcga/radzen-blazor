@@ -2,11 +2,11 @@
 
 <RadzenScheduler @ref=@scheduler SlotRender=@OnSlotRender style="height: 768px;" TItem="Appointment" Data=@appointments StartProperty="Start" EndProperty="End"
     TextProperty="Text" SelectedIndex="2"
-    SlotSelect=@OnSlotSelect AppointmentSelect=@OnAppointmentSelect AppointmentRender=@OnAppointmentRender>
+    SlotSelect=@OnSlotSelect AppointmentSelect=@OnAppointmentSelect AppointmentRender=@OnAppointmentRender
+    AppointmentMove=@OnAppointmentMove >
     <RadzenDayView />
     <RadzenWeekView />
     <RadzenMonthView />
-    <RadzenYearView />
 </RadzenScheduler>
 
 <EventConsole @ref=@console />
@@ -32,13 +32,13 @@
         // Highlight today in month view
         if (args.View.Text == "Month" && args.Start.Date == DateTime.Today)
         {
-            args.Attributes["style"] = "background: rgba(255,220,40,.2);";
+            args.Attributes["style"] = "background: var(--rz-scheduler-highlight-background-color, rgba(255,220,40,.2));";
         }
 
         // Highlight working hours (9-18)
         if ((args.View.Text == "Week" || args.View.Text == "Day") && args.Start.Hour > 8 && args.Start.Hour < 19)
         {
-            args.Attributes["style"] = "background: rgba(255,220,40,.2);";
+            args.Attributes["style"] = "background: var(--rz-scheduler-highlight-background-color, rgba(255,220,40,.2));";
         }
     }
 
@@ -91,6 +91,20 @@
         if (args.Data.Text == "Birthday")
         {
             args.Attributes["style"] = "background: red";
+        }
+    }
+
+    async Task OnAppointmentMove(SchedulerAppointmentMoveEventArgs args)
+    {
+        var draggedAppointment = appointments.FirstOrDefault(x => x == args.Appointment.Data);
+
+        if (draggedAppointment != null)
+        {
+            draggedAppointment.Start = draggedAppointment.Start + args.TimeSpan;
+
+            draggedAppointment.End = draggedAppointment.End + args.TimeSpan;
+
+            await scheduler.Reload();
         }
     }
 }

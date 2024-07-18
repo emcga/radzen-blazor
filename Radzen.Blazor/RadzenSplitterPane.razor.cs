@@ -203,6 +203,11 @@ namespace Radzen.Blazor
                 collapsed = parameters.GetValueOrDefault<bool>(nameof(Collapsed));
             }
 
+            if (parameters.DidParameterChange(nameof(Size), Size))
+            {
+                SizeRuntine = parameters.GetValueOrDefault<string>(nameof(Size));
+            }
+
             await base.SetParametersAsync(parameters);
         }
 
@@ -255,7 +260,7 @@ namespace Radzen.Blazor
 
                 var rect = await JSRuntime.InvokeAsync<Rect>("Radzen.clientRect", GetId() + "-resize");
 
-                await Splitter.StartResize(new MouseEventArgs()
+                await Splitter.StartResize(new PointerEventArgs()
                 {
                     ClientX = rect.Left,
                     ClientY = rect.Top

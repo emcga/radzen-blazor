@@ -40,6 +40,20 @@ namespace Radzen.Blazor
         public string CalendarWeekTitle { get; set; } = "#";
 
         /// <summary>
+        /// Gets or sets the toggle popup aria label text.
+        /// </summary>
+        /// <value>The toggle popup aria label text.</value>
+        [Parameter]
+        public string ToggleAriaLabel { get; set; } = "Toggle";
+
+        /// <summary>
+        /// Gets or sets the OK button aria label text.
+        /// </summary>
+        /// <value>The OK button aria label text.</value>
+        [Parameter]
+        public string OkAriaLabel { get; set; } = "Ok";
+
+        /// <summary>
         /// Gets or sets the previous month aria label text.
         /// </summary>
         /// <value>The previous month aria label text.</value>
@@ -137,6 +151,7 @@ namespace Radzen.Blazor
         {
             if (ShowTimeOkButton)
             {
+                DateTimeValue = newValue;
                 CurrentDate = newValue;
             }
             else
@@ -184,10 +199,7 @@ namespace Radzen.Blazor
 
         async Task OkClick()
         {
-            if (PopupRenderMode == PopupRenderMode.OnDemand && !Disabled && !ReadOnly && !Inline)
-            {
-                await popup.CloseAsync(Element);
-            }
+            Close();
 
             if(Min.HasValue && CurrentDate < Min.Value || Max.HasValue && CurrentDate > Max.Value)
             {
@@ -219,12 +231,12 @@ namespace Radzen.Blazor
 
                 if (monthDropDown != null)
                 {
-                    await monthDropDown.ClosePopup();
+                    await monthDropDown.PopupClose();
                 }
 
                 if (yearDropDown != null)
                 {
-                    await yearDropDown.ClosePopup();
+                    await yearDropDown.PopupClose();
                 }
             }
         }
@@ -464,6 +476,7 @@ namespace Radzen.Blazor
             set
             {
                 _currentDate = value;
+                FocusedDate = value;
                 CurrentDateChanged.InvokeAsync(value);
             }
         }
@@ -892,7 +905,7 @@ namespace Radzen.Blazor
 
         private string getStyle()
         {
-            return $"display: inline-block;{(Inline ? "overflow:auto;" : "")}{(Style != null ? Style : "")}";
+            return $"{(Inline ? "overflow:auto;" : "")}{(Style != null ? Style : "")}";
         }
 
         /// <summary>
@@ -922,11 +935,11 @@ namespace Radzen.Blazor
             {
                 if (Inline)
                 {
-                    return "white-space: nowrap";
+                    return "";
                 }
                 else
                 {
-                    return $"width: 320px; {contentStyle}";
+                    return $"{contentStyle}";
                 }
             }
         }
@@ -937,6 +950,10 @@ namespace Radzen.Blazor
             {
                 DateTimeOffset? offset = DateTime.SpecifyKind((DateTime)Value, Kind);
                 await ValueChanged.InvokeAsync((TValue)(object)offset);
+            }
+            else if ((typeof(TValue) == typeof(DateTime) || typeof(TValue) == typeof(DateTime?)) && Value != null)
+            {
+                await ValueChanged.InvokeAsync((TValue)(object)DateTime.SpecifyKind((DateTime)Value, Kind));
             }
             else
             {
@@ -952,7 +969,7 @@ namespace Radzen.Blazor
         protected override string GetComponentCssClass()
         {
             return ClassList.Create()
-                            .Add("rz-calendar-inline", Inline)
+                            .Add("rz-datepicker-inline", Inline)
                             .Add(FieldIdentifier, EditContext)
                             .ToString();
         }
@@ -995,16 +1012,6 @@ namespace Radzen.Blazor
             CurrentDate = newValue;
         }
 
-        private string getOpenPopup()
-        {
-            return PopupRenderMode == PopupRenderMode.Initial && !Disabled && !ReadOnly && !Inline ? $"Radzen.togglePopup(this.parentNode, '{PopupID}', false, null, null, true, true)" : "";
-        }
-
-        private string getOpenPopupForInput()
-        {
-            return PopupRenderMode == PopupRenderMode.Initial && !Disabled && !ReadOnly && !Inline && (!AllowInput || !ShowButton) ? $"Radzen.togglePopup(this.parentNode, '{PopupID}', false, null, null, true, true)" : "";
-        }
-
         /// <summary>
         /// Gets or sets the edit context.
         /// </summary>
@@ -1034,6 +1041,7 @@ namespace Radzen.Blazor
                 var max = parameters.GetValueOrDefault<DateTime?>(nameof(Max));
                 UpdateYearsAndMonths(min, max);
             }
+
             var shouldClose = false;
 
             if (parameters.DidParameterChange(nameof(Visible), Visible))
@@ -1044,7 +1052,7 @@ namespace Radzen.Blazor
 
             await base.SetParametersAsync(parameters);
 
-            if (shouldClose && !firstRender)
+            if (shouldClose && !firstRender && IsJSRuntimeAvailable)
             {
                 await JSRuntime.InvokeVoidAsync("Radzen.destroyPopup", PopupID);
             }
@@ -1054,6 +1062,21 @@ namespace Radzen.Blazor
                 FieldIdentifier = FieldIdentifier.Create(ValueExpression);
                 EditContext.OnValidationStateChanged -= ValidationStateChanged;
                 EditContext.OnValidationStateChanged += ValidationStateChanged;
+            }
+        }
+
+        bool firstRender;
+
+        /// <inheritdoc />
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            await base.OnAfterRenderAsync(firstRender);
+
+            this.firstRender = firstRender;
+
+            if (Visible && !Disabled && !ReadOnly && !Inline && PopupRenderMode == PopupRenderMode.Initial)
+            {
+                await JSRuntime.InvokeVoidAsync("Radzen.createDatePicker", Element, PopupID);
             }
         }
 
@@ -1077,6 +1100,7 @@ namespace Radzen.Blazor
             if (IsJSRuntimeAvailable)
             {
                 JSRuntime.InvokeVoidAsync("Radzen.destroyPopup", PopupID);
+                JSRuntime.InvokeVoidAsync("Radzen.destroyDatePicker", UniqueID, Element);
             }
         }
 
@@ -1093,22 +1117,8 @@ namespace Radzen.Blazor
         {
             get
             {
-                return $"popup{UniqueID}";
+                return $"popup{GetId()}";
             }
-        }
-
-        private bool firstRender = true;
-
-        /// <summary>
-        /// Called when [after render asynchronous].
-        /// </summary>
-        /// <param name="firstRender">if set to <c>true</c> [first render].</param>
-        /// <returns>Task.</returns>
-        protected override Task OnAfterRenderAsync(bool firstRender)
-        {
-            this.firstRender = firstRender;
-
-            return base.OnAfterRenderAsync(firstRender);
         }
 
         Popup popup;
@@ -1136,9 +1146,9 @@ namespace Radzen.Blazor
         {
             return ClassList.Create()
                                .Add("rz-state-default", !forCell)
-                               .Add("rz-datepicker-other-month", CurrentDate.Month != date.Month)
+                               .Add("rz-calendar-other-month", CurrentDate.Month != date.Month)
                                .Add("rz-state-active", !forCell && DateTimeValue.HasValue && DateTimeValue.Value.Date.CompareTo(date.Date) == 0)
-                               .Add("rz-datepicker-today", !forCell && DateTime.Now.Date.CompareTo(date.Date) == 0)
+                               .Add("rz-calendar-today", !forCell && DateTime.Now.Date.CompareTo(date.Date) == 0)
                                .Add("rz-state-focused", !forCell && FocusedDate.Date.CompareTo(date.Date) == 0)
                                .Add("rz-state-disabled", !forCell && dateArgs.Disabled)
                                .ToString();
@@ -1161,16 +1171,31 @@ namespace Radzen.Blazor
                 FocusedDate = FocusedDate.AddDays(key == "ArrowUp" ? -7 : 7);
                 CurrentDate = FocusedDate;
             }
-            else if (key == "Escape" || key == "Enter")
+            else if (key == "Enter")
             {
                 preventKeyPress = true;
 
-                if(key == "Enter")
-                {
-                    await SetDay(FocusedDate);
-                }
+                await SetDay(FocusedDate);
 
-                await TogglePopup();
+                await ClosePopup();
+#if NET5_0_OR_GREATER
+                await FocusAsync();
+#endif
+            }
+            else if (key == "Escape")
+            {
+                preventKeyPress = false;
+
+                await ClosePopup();
+#if NET5_0_OR_GREATER
+                await FocusAsync();
+#endif
+            }
+            else if (key == "Tab")
+            {
+                preventKeyPress = false;
+
+                await ClosePopup();
 #if NET5_0_OR_GREATER
                 await FocusAsync();
 #endif
@@ -1181,15 +1206,52 @@ namespace Radzen.Blazor
             }
         }
 
+        async Task OnPopupKeyDown(KeyboardEventArgs args)
+        {
+            var key = args.Code != null ? args.Code : args.Key;
+            if(key == "Escape")
+            {
+                preventKeyPress = false;
+
+                await ClosePopup();
+#if NET5_0_OR_GREATER
+                await FocusAsync();
+#endif
+            }
+        }
+
         async Task OnKeyPress(KeyboardEventArgs args)
         {
             var key = args.Code != null ? args.Code : args.Key;
 
-            if (key == "Escape" || key == "Enter")
+            if (args.AltKey && key == "ArrowDown")
+            {
+                preventKeyPress = true;
+
+                if (PopupRenderMode == PopupRenderMode.Initial)
+                {
+                    await JSRuntime.InvokeVoidAsync("Radzen.openPopup", Element, PopupID, false, null, null, null, null, null, true, true);
+                }
+                else
+                {
+                    await popup.CloseAsync(Element);
+                    await popup.ToggleAsync(Element);
+                }
+            }
+            else if (key == "Enter")
             {
                 preventKeyPress = true;
 
                 await TogglePopup();
+            }
+            else if (key == "Escape")
+            {
+                preventKeyPress = false;
+
+                await ClosePopup();
+#if NET5_0_OR_GREATER
+                await FocusAsync();
+#endif
             }
             else
             {
@@ -1206,6 +1268,18 @@ namespace Radzen.Blazor
             else
             {
                 await popup.ToggleAsync(Element);
+            }
+        }
+
+        async Task ClosePopup()
+        {
+            if (PopupRenderMode == PopupRenderMode.Initial)
+            {
+                await JSRuntime.InvokeVoidAsync("Radzen.closePopup", PopupID);
+            }
+            else
+            {
+                await popup.CloseAsync(Element);
             }
         }
 

@@ -46,7 +46,7 @@ namespace Radzen
             var totalItemsCount = LoadData.HasDelegate ? Count : view.Count();
             var top = request.Count;
 
-            if(top <= 0)
+            if (top <= 0)
             {
                 top = PageSize;
             }
@@ -122,7 +122,7 @@ namespace Radzen
                         });
                     }));
 
-                    if(VirtualizationOverscanCount != default(int))
+                    if (VirtualizationOverscanCount != default(int))
                     {
                         builder.AddAttribute(3, "OverscanCount", VirtualizationOverscanCount);
                     }
@@ -195,6 +195,13 @@ namespace Radzen
         }
 
         /// <summary>
+        /// Gets or sets the header template.
+        /// </summary>
+        /// <value>The header template.</value>
+        [Parameter]
+        public RenderFragment HeaderTemplate { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether filtering is allowed. Set to <c>false</c> by default.
         /// </summary>
         /// <value><c>true</c> if filtering is allowed; otherwise, <c>false</c>.</value>
@@ -265,11 +272,18 @@ namespace Radzen
         public string SearchAriaLabel { get; set; } = "Search";
 
         /// <summary>
+        /// Gets or sets the empty value aria label text.
+        /// </summary>
+        /// <value>The empty value aria label text.</value>
+        [Parameter]
+        public string EmptyAriaLabel { get; set; } = "Empty";
+
+        /// <summary>
         /// Gets or sets the selected item changed.
         /// </summary>
         /// <value>The selected item changed.</value>
         [Parameter]
-        public Action<object> SelectedItemChanged { get; set; }
+        public EventCallback<object> SelectedItemChanged { get; set; }
 
         /// <summary>
         /// The selected items
@@ -283,7 +297,7 @@ namespace Radzen
         /// <summary>
         /// Selects all.
         /// </summary>
-        protected async System.Threading.Tasks.Task SelectAll()
+        protected virtual async System.Threading.Tasks.Task SelectAll()
         {
             if (Disabled)
             {
@@ -337,6 +351,8 @@ namespace Radzen
             await Change.InvokeAsync(internalValue);
 
             StateHasChanged();
+
+            await JSRuntime.InvokeVoidAsync("Radzen.focusElement", GetId());
         }
 
         internal bool IsAllSelected()
@@ -441,19 +457,32 @@ namespace Radzen
 
                 if (!string.IsNullOrEmpty(ValueProperty))
                 {
-                    valuePropertyGetter = PropertyAccess.Getter<object, object>(ValueProperty, type);
+                    valuePropertyGetter = GetGetter(ValueProperty, type);
                 }
 
                 if (!string.IsNullOrEmpty(TextProperty))
                 {
-                    textPropertyGetter = PropertyAccess.Getter<object, object>(TextProperty, type);
+                    textPropertyGetter = GetGetter(TextProperty, type);
                 }
 
                 if (!string.IsNullOrEmpty(DisabledProperty))
                 {
-                    disabledPropertyGetter = PropertyAccess.Getter<object, object>(DisabledProperty, type);
+                    disabledPropertyGetter = GetGetter(DisabledProperty, type);
                 }
             }
+        }
+
+        Func<object, object> GetGetter(string propertyName, Type type)
+        {
+            if (propertyName?.Contains("[") == true)
+            {
+                var getter = typeof(PropertyAccess).GetMethod("Getter", [typeof(string), typeof(Type)]);
+                var getterMethod = getter.MakeGenericMethod([type, typeof(object)]);
+
+                return (i) => getterMethod.Invoke(i, [propertyName, type]);
+            }
+
+            return PropertyAccess.Getter<object, object>(propertyName, type);
         }
 
         internal Func<object, object> valuePropertyGetter;
@@ -470,23 +499,23 @@ namespace Radzen
         {
             if (item != null)
             {
-                if (property == TextProperty && textPropertyGetter != null)
-                {
-                    return textPropertyGetter(item);
-                }
-                else if (property == ValueProperty && valuePropertyGetter != null)
-                {
-                    return valuePropertyGetter(item);
-                }
-                else if (property == DisabledProperty && disabledPropertyGetter != null)
-                {
-                    return disabledPropertyGetter(item);
-                }
-
                 var enumValue = item as Enum;
                 if (enumValue != null)
                 {
                     return Radzen.Blazor.EnumExtensions.GetDisplayDescription(enumValue);
+                }
+
+                if (property == TextProperty)
+                {
+                    return textPropertyGetter != null ? textPropertyGetter(item) : PropertyAccess.GetItemOrValueFromProperty(item, property);
+                }
+                else if (property == ValueProperty)
+                {
+                    return valuePropertyGetter != null ? valuePropertyGetter(item) : PropertyAccess.GetItemOrValueFromProperty(item, property);
+                }
+                else if (property == DisabledProperty)
+                {
+                    return disabledPropertyGetter != null ? disabledPropertyGetter(item) : PropertyAccess.GetItemOrValueFromProperty(item, property);
                 }
             }
 
@@ -522,7 +551,7 @@ namespace Radzen
         /// Gets the search identifier.
         /// </summary>
         /// <value>The search identifier.</value>
-        protected string SearchID
+        public string SearchID
         {
             get
             {
@@ -625,7 +654,7 @@ namespace Radzen
                 if (IsVirtualizationAllowed())
                 {
 #if NET5_0_OR_GREATER
-                    items = virtualItems;
+                    items = virtualItems ?? Enumerable.Empty<object>().ToList();
 #endif
                 }
                 else
@@ -648,7 +677,11 @@ namespace Radzen
 
                     if (!Multiple && !popupOpened && shouldSelectOnChange != false)
                     {
-                        await OnSelectItem(items.ElementAt(selectedIndex), true);
+                        var itemToSelect = items.ElementAtOrDefault(selectedIndex);
+                        if (itemToSelect != null)
+                        {
+                            await OnSelectItem(itemToSelect, true);
+                        }
                     }
                 }
                 catch (Exception)
@@ -663,7 +696,11 @@ namespace Radzen
                 if (selectedIndex >= 0 && selectedIndex <= items.Count() - 1)
                 {
                     await JSRuntime.InvokeAsync<string>("Radzen.setInputValue", search, $"{searchText}".Trim());
-                    await OnSelectItem(items.ElementAt(selectedIndex), true);
+                    var itemToSelect = items.ElementAtOrDefault(selectedIndex);
+                    if (itemToSelect != null)
+                    {
+                        await OnSelectItem(itemToSelect, true);
+                    }
                 }
 
                 var popupOpened = await JSRuntime.InvokeAsync<bool>("Radzen.popupOpened", PopupID);
@@ -711,12 +748,9 @@ namespace Radzen
 
                 Debounce(DebounceFilter, FilterDelay);
             }
-            else 
+            else
             {
-                var filteredItems = GetView(items.AsQueryable(), 
-                    args.Key, 
-                    StringFilterOperator.StartsWith, 
-                    FilterCaseSensitivity.CaseInsensitive)
+                var filteredItems = Query.Where(TextProperty, args.Key, StringFilterOperator.StartsWith, FilterCaseSensitivity.CaseInsensitive)
                     .Cast<object>()
                     .ToList();
 
@@ -724,7 +758,7 @@ namespace Radzen
                 if (previousKey != args.Key)
                 {
                     previousKey = args.Key;
-                    itemIndex = 0;
+                    itemIndex = -1;
                 }
 
                 itemIndex = itemIndex + 1 >= filteredItems.Count() ? 0 : itemIndex + 1;
@@ -745,7 +779,7 @@ namespace Radzen
                             selectedIndex = result.Index;
                         }
                         await JSRuntime.InvokeVoidAsync("Radzen.selectListItem", list, list, result.Index);
-                    }                    
+                    }
                 }
 
                 preventKeydown = false;
@@ -899,7 +933,7 @@ namespace Radzen
         {
 #if NET5_0_OR_GREATER
             var pageSize = parameters.GetValueOrDefault<int>(nameof(PageSize));
-            if(pageSize != default(int))
+            if (pageSize != default(int))
             {
                 PageSize = pageSize;
             }
@@ -941,7 +975,7 @@ namespace Radzen
 
             if (valueAsEnumerable != null)
             {
-                if (!valueAsEnumerable.Cast<object>().SequenceEqual(selectedItems.Select(i => GetItemOrValueFromProperty(i, ValueProperty))))
+                if (!valueAsEnumerable.Cast<object>().SequenceEqual(selectedItems.Select(i => string.IsNullOrEmpty(ValueProperty) ? i : GetItemOrValueFromProperty(i, ValueProperty))))
                 {
                     selectedItems.Clear();
                 }
@@ -1024,71 +1058,6 @@ namespace Radzen
             }
         }
 
-        IQueryable GetView(IQueryable source, string value, StringFilterOperator? op = null, FilterCaseSensitivity? cs = null)
-        {
-            IQueryable result;
-
-            if (!string.IsNullOrEmpty(value))
-            {
-                var ignoreCase = (cs ?? FilterCaseSensitivity) == FilterCaseSensitivity.CaseInsensitive;
-
-                var query = new List<string>();
-
-                if (!string.IsNullOrEmpty(TextProperty))
-                {
-                    query.Add(TextProperty);
-                }
-
-                if (typeof(EnumerableQuery).IsAssignableFrom(source.GetType()))
-                {
-                    query.Add("ToString()");
-                }
-
-                if (ignoreCase)
-                {
-                    query.Add("ToLower()");
-                }
-
-                query.Add($"{Enum.GetName(typeof(StringFilterOperator), op ?? FilterOperator)}(@0)");
-
-                var search = ignoreCase ? value.ToLower() : value;
-
-                if (source.ElementType == typeof(Enum))
-                {
-                    result = source.Cast<Enum>()
-                        .Where((Func<Enum, bool>)(i =>
-                        {
-                            var v = ignoreCase ? i.GetDisplayDescription().ToLower() : i.GetDisplayDescription();
-
-                            if (FilterOperator == StringFilterOperator.Contains)
-                            {
-                                return v.Contains(search);
-                            }
-                            else if (FilterOperator == StringFilterOperator.StartsWith)
-                            {
-                                return v.StartsWith(search);
-                            }
-                            else if (FilterOperator == StringFilterOperator.EndsWith)
-                            {
-                                return v.EndsWith(search);
-                            }
-
-                            return v == search;
-                        })).AsQueryable();
-                }
-                else
-                {
-                    result = source.Where(String.Join(".", query), search);
-                }
-            }
-            else
-            {
-                result = source;
-            }
-
-            return result;
-        }
-
         /// <summary>
         /// Gets the view.
         /// </summary>
@@ -1099,7 +1068,7 @@ namespace Radzen
             {
                 if (_view == null && Query != null)
                 {
-                    _view = GetView(Query, searchText);
+                    _view = Query.Where(TextProperty, searchText, FilterOperator, FilterCaseSensitivity);
                 }
 
                 return _view;
@@ -1147,7 +1116,7 @@ namespace Radzen
         /// <param name="raiseChange">if set to <c>true</c> [raise change].</param>
         public async System.Threading.Tasks.Task SelectItem(object item, bool raiseChange = true)
         {
-            if (disabledPropertyGetter != null && disabledPropertyGetter(item) as bool? == true)
+            if (disabledPropertyGetter != null && item != null && disabledPropertyGetter(item) as bool? == true)
             {
                 return;
             }
@@ -1169,7 +1138,7 @@ namespace Radzen
 
                 SetSelectedIndexFromSelectedItem();
 
-                SelectedItemChanged?.Invoke(selectedItem);
+                await SelectedItemChanged.InvokeAsync(selectedItem);
             }
             else
             {
@@ -1267,7 +1236,7 @@ namespace Radzen
                 }
                 else
                 {
-                    selectedItems = selectedItems.AsQueryable().Where($@"!object.Equals(it.{ValueProperty},@0)", value).ToList();
+                    selectedItems = selectedItems.AsQueryable().Where(DynamicLinqCustomTypeProvider.ParsingConfig, $@"!object.Equals(it.{ValueProperty},@0)", value).ToList();
                 }
             }
             else
@@ -1302,7 +1271,7 @@ namespace Radzen
                         }
                         else
                         {
-                            SelectedItem = view.AsQueryable().Where($@"{ValueProperty} == @0", value).FirstOrDefault();
+                            SelectedItem = view.AsQueryable().Where(DynamicLinqCustomTypeProvider.ParsingConfig, $@"{ValueProperty} == @0", value).FirstOrDefault();
                         }
                     }
                     else
@@ -1311,8 +1280,6 @@ namespace Radzen
                     }
 
                     SetSelectedIndexFromSelectedItem();
-
-                    SelectedItemChanged?.Invoke(selectedItem);
                 }
                 else
                 {
@@ -1331,10 +1298,10 @@ namespace Radzen
                                 }
                                 else
                                 {
-                                    item = view.AsQueryable().Where($@"{ValueProperty} == @0", v).FirstOrDefault();
+                                    item = view.AsQueryable().Where(DynamicLinqCustomTypeProvider.ParsingConfig, $@"{ValueProperty} == @0", v).FirstOrDefault();
                                 }
 
-                                if (!object.Equals(item, null) && !selectedItems.AsQueryable().Where($@"object.Equals(it.{ValueProperty},@0)", v).Any())
+                                if (!object.Equals(item, null) && !selectedItems.AsQueryable().Where(DynamicLinqCustomTypeProvider.ParsingConfig, $@"object.Equals(it.{ValueProperty},@0)", v).Any())
                                 {
                                     selectedItems.Add(item);
                                 }

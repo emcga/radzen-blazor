@@ -12,6 +12,11 @@ namespace Radzen.Blazor
     public interface IScheduler
     {
         /// <summary>
+        /// Gets or sets the appointment move event callback.
+        /// </summary>
+        /// <value>The appointment move event callback.</value>
+        EventCallback<SchedulerAppointmentMoveEventArgs> AppointmentMove { get; set; }
+        /// <summary>
         /// Gets the appointments in the specified range.
         /// </summary>
         /// <param name="start">The start of the range.</param>
@@ -66,6 +71,12 @@ namespace Radzen.Blazor
         /// <param name="appointments">The appointments for this range.</param>
         Task<bool> SelectSlot(DateTime start, DateTime end, IEnumerable<AppointmentData> appointments);
         /// <summary>
+        /// Selects the specified month.
+        /// </summary>
+        /// <param name="monthStart">The start of the month.</param>
+        /// <param name="appointments">The appointments for this range.</param>
+        Task SelectMonth(DateTime monthStart, IEnumerable<AppointmentData> appointments);
+        /// <summary>
         /// Selects the specified more link.
         /// </summary>
         /// <param name="start">The start.</param>
@@ -97,14 +108,17 @@ namespace Radzen.Blazor
         /// </summary>
         /// <param name="reference"></param>
         /// <param name="data"></param>
-        /// <returns></returns>
         Task MouseEnterAppointment(ElementReference reference, AppointmentData data);
 
         /// <summary>
         /// Returns true if the scheduler has a mouse enter appointment listener.
         /// </summary>
-        /// <returns></returns>
         bool HasMouseEnterAppointmentDelegate();
+
+        /// <summary>
+        /// Returns true if the scheduler has an AppointmentMove listener.
+        /// </summary>
+        bool HasAppointmentMoveDelegate();
 
         /// <summary>
         /// Notifies the scheduler that the user has moved the mouse out of the specified appointment.

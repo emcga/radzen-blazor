@@ -1,18 +1,21 @@
 @using System.Globalization
 
-<div class="container">
-    <div class="row">
-        <div class="col-sm-12">
-            <RadzenCard class="w-100 mb-4" >
-                <RadzenCheckBox @bind-Value="@showDataLabels" Name="dataLabels"></RadzenCheckBox>
-                <RadzenLabel Text="Show Data Labels" Component="dataLabels" Style="margin-left: 8px; vertical-align: middle;" />
-            </RadzenCard>
+<RadzenStack Class="rz-p-0 rz-p-md-6 rz-p-lg-12">
+    <RadzenCard Variant="Variant.Outlined">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenCheckBox @bind-Value="@showDataLabels" Name="dataLabels"></RadzenCheckBox>
+            <RadzenLabel Text="Show Data Labels" Component="dataLabels" />
+        </RadzenStack>
+    </RadzenCard>
+
+    <RadzenRow>
+        <RadzenColumn Size="12">
             <h4>Auto-size stacked bar series</h4>
             <RadzenChart SeriesClick=@OnSeriesClick style="height: 400px">
-                <RadzenStackedBarSeries Data="@revenue2020" CategoryProperty="Quarter" Title="2020" LineType="LineType.Dashed" ValueProperty="Revenue">
+                <RadzenStackedBarSeries Data="@revenue2024" CategoryProperty="Quarter" Title="2024" LineType="LineType.Dashed" ValueProperty="Revenue">
                     <RadzenSeriesDataLabels Visible="@showDataLabels" />
                 </RadzenStackedBarSeries>
-                <RadzenStackedBarSeries Data="@revenue2019" CategoryProperty="Quarter" Title="2019" ValueProperty="Revenue">
+                <RadzenStackedBarSeries Data="@revenue2023" CategoryProperty="Quarter" Title="2023" ValueProperty="Revenue">
                     <RadzenSeriesDataLabels Visible="@showDataLabels" />
                 </RadzenStackedBarSeries>
                 <RadzenValueAxis Formatter="@FormatAsUSD" Min="0" Max="800000" Step="100000">
@@ -21,19 +24,22 @@
                 </RadzenValueAxis>
                 <RadzenBarOptions Radius="5" />
             </RadzenChart>
+        </RadzenColumn>
+
+        <RadzenColumn Size="12">
             <h4>Custom size stacked bar series</h4>
             <RadzenChart SeriesClick=@OnSeriesClick style="height: 400px">
-                <RadzenStackedBarSeries Data="@revenue2020" CategoryProperty="Quarter" Title="2020" LineType="LineType.Dashed" ValueProperty="Revenue" />
-                <RadzenStackedBarSeries Data="@revenue2019" CategoryProperty="Quarter" Title="2019" ValueProperty="Revenue" />
+                <RadzenStackedBarSeries Data="@revenue2024" CategoryProperty="Quarter" Title="2024" LineType="LineType.Dashed" ValueProperty="Revenue" />
+                <RadzenStackedBarSeries Data="@revenue2023" CategoryProperty="Quarter" Title="2023" ValueProperty="Revenue" />
                 <RadzenValueAxis Formatter="@FormatAsUSD" Min="0" Max="800000" Step="100000">
                     <RadzenGridLines Visible="true" />
                     <RadzenAxisTitle Text="Revenue in USD" />
                 </RadzenValueAxis>
                 <RadzenBarOptions Radius="5" Height="20" />
             </RadzenChart>
-        </div>
-    </div>
-</div>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenStack>
 
 <EventConsole @ref=@console />
 
@@ -59,7 +65,7 @@
         return num.ToString("$0K");
     }
 
-    DataItem[] revenue2019 = new DataItem[]
+    DataItem[] revenue2023 = new DataItem[]
     {
     new DataItem
     {
@@ -83,7 +89,7 @@
     },
     };
 
-    DataItem[] revenue2020 = new DataItem[] {
+    DataItem[] revenue2024 = new DataItem[] {
     new DataItem
     {
     Quarter = "Q1",

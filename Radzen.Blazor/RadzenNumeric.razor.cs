@@ -18,7 +18,7 @@ namespace Radzen.Blazor
     /// &lt;RadzenNumeric TValue="int" Min="1" Max="10" Change=@(args => Console.WriteLine($"Value: {args}")) /&gt;
     /// </code>
     /// </example>
-    public partial class RadzenNumeric<TValue> : FormComponent<TValue>
+    public partial class RadzenNumeric<TValue> : FormComponentWithAutoComplete<TValue>
     {
         /// <summary>
         /// Specifies additional custom attributes that will be rendered by the input.
@@ -35,14 +35,14 @@ namespace Radzen.Blazor
         /// <inheritdoc />
         protected override string GetComponentCssClass()
         {
-            return GetClassList("rz-spinner")
+            return GetClassList("rz-numeric")
                                         .Add($"rz-text-align-{Enum.GetName(typeof(TextAlign), TextAlign).ToLower()}")
                                         .ToString();
         }
 
         string GetInputCssClass()
         {
-            return GetClassList("rz-spinner-input")
+            return GetClassList("rz-numeric-input")
                         .Add("rz-inputtext")
                         .ToString();
         }
@@ -77,6 +77,59 @@ namespace Radzen.Blazor
             }
         }
 
+        private bool IsNumericType(object value) => value switch
+        {
+            sbyte => true,
+            byte => true,
+            short => true,
+            ushort => true,
+            int => true,
+            uint => true,
+            long => true,
+            ulong => true,
+            float => true,
+            double => true,
+            decimal => true,
+            _ => false
+        };
+
+#if NET7_0_OR_GREATER
+        /// <summary>
+        /// Use native numeric type to process the step up/down while checking for possible overflow errors
+        /// and clamping to Min/Max values
+        /// </summary>
+        /// <typeparam name="TNum"></typeparam>
+        /// <param name="valueToUpdate"></param>
+        /// <param name="stepUp"></param>
+        /// <param name="decimalStep"></param>
+        /// <returns></returns>
+        private TNum UpdateValueWithStepNumeric<TNum>(TNum valueToUpdate, bool stepUp, decimal decimalStep) 
+            where TNum : struct, System.Numerics.INumber<TNum>, System.Numerics.IMinMaxValue<TNum>
+        {
+            var step = TNum.CreateSaturating(decimalStep);
+
+            if (stepUp && (TNum.MaxValue - step) < valueToUpdate)
+            {
+                return valueToUpdate;
+            }
+            if (!stepUp && (TNum.MinValue + step) > valueToUpdate)
+            {
+                return valueToUpdate;
+            }
+
+            var newValue = valueToUpdate + (stepUp ? step : -step);
+
+            if (Max.HasValue && newValue > TNum.CreateSaturating(Max.Value) 
+                || Min.HasValue && newValue < TNum.CreateSaturating(Min.Value) 
+                || object.Equals(Value, newValue))
+            {
+                return valueToUpdate;
+            }
+
+            return newValue;
+        }
+#endif
+
         async System.Threading.Tasks.Task UpdateValueWithStep(bool stepUp)
         {
             if (Disabled || ReadOnly)
@@ -85,17 +138,41 @@ namespace Radzen.Blazor
             }
 
             var step = string.IsNullOrEmpty(Step) || Step == "any" ? 1 : decimal.Parse(Step.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
+            TValue newValue;
 
-            var valueToUpdate = ConvertToDecimal(Value);
-
-            var newValue = valueToUpdate + (stepUp ? step : -step);
-
-            if (Max.HasValue && newValue > Max.Value || Min.HasValue && newValue < Min.Value || object.Equals(Value, newValue))
+#if NET7_0_OR_GREATER
+            if (IsNumericType(Value))
             {
-                return;
+                // cannot call UpdateValueWithStepNumeric directly because TValue is not value type constrained
+                Func<dynamic, bool, decimal, dynamic> dynamicWrapper = (dynamic value, bool stepUp, decimal step) 
+                    => UpdateValueWithStepNumeric(value, stepUp, step);
+
+                newValue = dynamicWrapper(Value, stepUp, step);
+            }
+            else
+#endif
+            {
+                var valueToUpdate = ConvertToDecimal(Value);
+
+                var newValueToUpdate = valueToUpdate + (stepUp ? step : -step);
+
+                if (Max.HasValue && newValueToUpdate > Max.Value || Min.HasValue && newValueToUpdate < Min.Value || object.Equals(Value, newValueToUpdate))
+                {
+                    return;
+                }
+
+                if ((typeof(TValue) == typeof(byte) || typeof(TValue) == typeof(byte?)) && (newValueToUpdate < 0 || newValueToUpdate > 255))
+                {
+                    return;
+                }
+
+                newValue = ConvertFromDecimal(newValueToUpdate);
             }
 
-            Value = ConvertFromDecimal(newValue);
+            if(object.Equals(newValue, Value))
+                return;
+
+            Value = newValue;
 
             await ValueChanged.InvokeAsync(Value);
             if (FieldIdentifier.FieldName != null) { EditContext?.NotifyFieldChanged(FieldIdentifier); }
@@ -214,31 +291,7 @@ namespace Radzen.Blazor
         /// </summary>
         /// <value><c>true</c> if input automatic complete is enabled; otherwise, <c>false</c>.</value>
         [Parameter]
-        public bool AutoComplete { get; set; } = false;
-
-        /// <summary>
-        /// Gets or sets a value indicating the type of built-in autocomplete
-        /// the browser should use.
-        /// <see cref="Blazor.AutoCompleteType" />
-        /// </summary>
-        /// <value>
-        /// The type of built-in autocomplete.
-        /// </value>
-        [Parameter]
-        public AutoCompleteType AutoCompleteType { get; set; } = AutoCompleteType.On;
-
-        /// <summary>
-        /// Gets the autocomplete attribute's string value.
-        /// </summary>
-        /// <value>
-        /// <c>off</c> if the AutoComplete parameter is false or the
-        /// AutoCompleteType parameter is "off". When the AutoComplete
-        /// parameter is true, the value is <c>on</c> or, if set, the value of
-        /// AutoCompleteType.</value>
-        public string AutoCompleteAttribute
-        {
-            get => !AutoComplete ? "off" : AutoCompleteType.GetAutoCompleteValue();
-        }
+        public override bool AutoComplete { get; set; } = false;
 
         /// <summary>
         /// Gets or sets a value indicating whether up down buttons are shown.
@@ -459,6 +512,18 @@ namespace Radzen.Blazor
                 preventKeyPress = false;
             }
         }
+
+        /// <summary>
+        /// Gets or sets the up button aria-label attribute.
+        /// </summary>
+        [Parameter]
+        public string UpAriaLabel { get; set; } = "Up";
+
+        /// <summary>
+        /// Gets or sets the down button aria-label attribute.
+        /// </summary>
+        [Parameter]
+        public string DownAriaLabel { get; set; } = "Down";
 
 #if NET5_0_OR_GREATER
         /// <summary>

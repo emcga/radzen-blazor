@@ -29,6 +29,13 @@ namespace Radzen.Blazor
         }
 
         /// <summary>
+        /// Gets or sets the child content.
+        /// </summary>
+        /// <value>The child content.</value>
+        [Parameter]
+        public RenderFragment ButtonContent { get; set; }
+
+        /// <summary>
         /// Gets or sets the text.
         /// </summary>
         /// <value>The text.</value>
@@ -131,6 +138,12 @@ namespace Radzen.Blazor
         /// </summary>
         [Parameter]
         public string OpenAriaLabel { get; set; } = "Open";
+
+        /// <summary>
+        /// Gets or sets the icon of the drop down.
+        /// </summary>
+        [Parameter]
+        public string DropDownIcon { get; set; } = "arrow_drop_down";
 
         /// <summary>
         /// Gets or sets the click callback.
@@ -289,5 +302,16 @@ namespace Radzen.Blazor
                 StateHasChanged();
             }
         }
+
+        internal string SplitButtonId()
+        {
+            return GetId();
+        }
+
+        /// <summary>
+        /// Gets or sets the add button aria-label attribute.
+        /// </summary>
+        [Parameter]
+        public string ButtonAriaLabel { get; set; } = "Button";
     }
 }

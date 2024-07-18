@@ -94,7 +94,7 @@ namespace Radzen.Blazor
             }
         }
 
-        internal Task StartResize(MouseEventArgs args, int paneIndex)
+        internal Task StartResize(PointerEventArgs args, int paneIndex)
         {
             var pane = Panes[paneIndex];
             if (!pane.Resizable)
@@ -177,6 +177,8 @@ namespace Radzen.Blazor
 
                 paneNext.SizeRuntine = sizeNextNew.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%";
             }
+
+            StateHasChanged();
         }
 
         internal async Task OnCollapse(int paneIndex)
